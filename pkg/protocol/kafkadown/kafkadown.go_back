@@ -1,0 +1,94 @@
+package kafkadown
+
+import (
+	"encoding/json"
+	"github.com/confluentinc/confluent-kafka-go/v2/kafka"
+	"go.uber.org/zap"
+	"os"
+	"os/signal"
+	"strings"
+	"syscall"
+	"zingthings/pkg/protocol/core"
+)
+
+type (
+	KafkaDown struct {
+		logger   zap.Logger
+		downLink *core.DownLink
+		reader   *kafka.Consumer
+	}
+	DownMessage struct {
+		DeviceId core.DeviceId `json:"deviceId"`
+		Data     []byte        `json:"data"`
+	}
+)
+
+func NewKafkaDown(downLink *core.DownLink) *KafkaDown {
+	consumer, err := kafka.NewConsumer(&kafka.ConfigMap{
+		"bootstrap.servers": "localhost",
+		"group.id":          "myGroup",
+		"auto.offset.reset": "earliest",
+	})
+	if err != nil {
+		panic(err)
+	}
+	return &KafkaDown{
+		downLink: downLink,
+		reader:   consumer,
+	}
+}
+
+func (k *KafkaDown) Start() {
+	defer k.reader.Close()
+	err := k.reader.SubscribeTopics([]string{"zthings.*.*.down"}, nil)
+	if err != nil {
+		k.logger.Error("subscribe topic failed", zap.Error(err))
+		return
+	}
+	signChan := make(chan os.Signal, 1)
+	var shutdownSignals = []os.Signal{os.Interrupt, syscall.SIGTERM}
+	signal.Notify(signChan, shutdownSignals...)
+	go func() {
+		// 开始消费消息
+		run := true
+		for run == true {
+			select {
+			case sig := <-signChan:
+				k.logger.Info("接收到信号 正在终止 ", zap.String("signal", sig.String()))
+				run = false
+			default:
+				// 轮询Kafka消息，1次最多拉取100条消息
+				ev := k.reader.Poll(100)
+				if ev == nil {
+					continue
+				}
+				switch e := ev.(type) {
+				case *kafka.Message:
+					// 处理消费的消息
+					topic := e.TopicPartition.Topic
+					deviceGroupId := strings.Split(*topic, ".")[1]
+					message := &DownMessage{}
+					err2 := json.Unmarshal(e.Value, message)
+					if err2 != nil {
+						k.logger.Error("convert json error", zap.Error(err2))
+						continue
+					}
+					err1 := k.downLink.DownLink(&core.Message{
+						Header: core.Header{
+							DeviceId:      message.DeviceId,
+							DeviceGroupId: core.DeviceGroupId(deviceGroupId),
+						},
+						Data: message.Data,
+					})
+					if err1 != nil {
+						k.logger.Error("downLink failed", zap.Error(err1))
+						return
+					}
+				case kafka.Error:
+					// 处理Kafka错误
+					k.logger.Error("Kafka消息错误", zap.Error(e))
+				}
+			}
+		}
+	}()
+}

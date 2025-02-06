@@ -1,0 +1,46 @@
+POST {{baseDeployUrl}}/deploy
+Content-Type: application/json
+
+{
+  "ProtocolId": "test",
+  "ProtocolType": "HTTP_SERVER",
+  "DeviceInfoMap": {
+    "testDeviceGroupId": [
+      {
+        "DeviceId": "testDeviceId",
+        "DeviceName": "testDeviceName"
+      }
+    ]
+  },
+  "Number": 2
+}
+
+###
+POST {{baseDeployUrl}}/deploy
+Content-Type: application/json
+
+{
+  "ProtocolId": "test",
+  "ProtocolType": "TCP_SERVER",
+  "DeviceInfoMap": {
+    "testDeviceGroupId2": [
+      {
+        "DeviceId": "testDeviceId2",
+        "DeviceName": "testDeviceName"
+      }
+    ]
+  },
+  "Number": 1
+}
+
+###
+GET {{baseDeployUrl}}/protocolAll
+Content-Type: application/json
+
+###
+POST {{baseUrl}}:8787/testDeviceGroupId/testDeviceId/propertyReport
+Content-Type: application/json
+
+{
+  "a": "b"
+}

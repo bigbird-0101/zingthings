@@ -1,0 +1,54 @@
+package channelhandler
+
+import (
+	"context"
+	"github.com/segmentio/kafka-go"
+	"go.uber.org/zap"
+	"os"
+	"os/signal"
+	"syscall"
+	"zingthings/pkg/protocol/core"
+)
+
+type (
+	KafkaUpSegmentioChannelHandler struct {
+		*core.SimplePredicateChannelHandler
+		writer *kafka.Writer
+		reader *kafka.Reader
+		logger *zap.Logger
+	}
+)
+
+func NewKafkaUpSegmentioChannelHandler(logger *zap.Logger) *KafkaUpSegmentioChannelHandler {
+	named := logger.Named("KafkaUpChannelHandler")
+	writer := &kafka.Writer{
+		Addr: kafka.TCP("10.82.14.72:9092"),
+	}
+	var shutdownSignals = []os.Signal{os.Interrupt, syscall.SIGTERM}
+	c := make(chan os.Signal, 1)
+	signal.Notify(c, shutdownSignals...)
+	go func() {
+		<-c
+		writer.Close()
+	}()
+	return &KafkaUpSegmentioChannelHandler{
+		writer: writer,
+		logger: named,
+		SimplePredicateChannelHandler: core.NewAsyncSimpleUpChannelHandler(
+			func(handlerContext core.ChannelHandlerContext, message *core.Message) {
+				logger.Info("start send kafka message ")
+				topic := string("zthings." + message.Header.DeviceGroupId)
+				err := writer.WriteMessages(context.TODO(),
+					kafka.Message{
+						Topic: topic,
+						Value: message.Data.([]byte),
+					},
+				)
+				if err != nil {
+					logger.Error("KafkaUpChannelHandler write up message error", zap.Error(err))
+					return
+				}
+				logger.Info("end send kafka message ")
+			}),
+	}
+}
