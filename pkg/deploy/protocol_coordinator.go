@@ -79,10 +79,12 @@ func (coordinator *Coordinator) register(group *sync.WaitGroup) {
 			select {
 			case <-ctx.Done():
 				ticker.Stop()
+				coordinator.logger.Info("keep alive cancel")
 				return
 			case <-ticker.C:
 				response, err2 := coordinator.client.KeepAlive(ctx, grant.ID)
 				if err2 != nil {
+					coordinator.logger.Error("keep alive", zap.Error(err2))
 					return
 				}
 				go func() {
@@ -330,7 +332,6 @@ func (coordinator *Coordinator) fault(group *sync.WaitGroup) {
 							coordinator.logger.Error("get", zap.Error(err))
 							continue
 						}
-						//TODO 如果所属节点存在 是否确定 需要重新调度 有可能网络的分区容错性 这里要重新考虑
 						if get.Count > 0 {
 							allNodeCount := len(coordinator.allNodeInfos)
 							hashCode := stringToHashCode(string(protocolInfoValue.Id))
