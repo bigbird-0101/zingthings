@@ -335,6 +335,9 @@ func (coordinator *Coordinator) fault(group *sync.WaitGroup) {
 							allNodeCount := len(coordinator.allNodeInfos)
 							hashCode := stringToHashCode(string(protocolInfoValue.Id))
 							currentSlot := coordinator.getCurrentSlot()
+							if allNodeCount == 0 {
+								continue
+							}
 							u := hashCode % uint64(allNodeCount)
 							coordinator.logger.Info("need dispatch", zap.String("protocolInfo",
 								string(protocolInfoValue.Id)), zap.Int("current slot", currentSlot),
