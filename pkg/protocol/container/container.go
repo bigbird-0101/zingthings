@@ -211,7 +211,7 @@ func (d *Container) Deploy(request *core.DeployRequest) error {
 		if err != nil {
 			return err
 		}
-		properties := make(map[string]interface{})
+		properties := request.Properties
 		nodeContext := &core.NodeContext{
 			Properties: properties,
 		}
