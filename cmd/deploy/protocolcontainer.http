@@ -20,17 +20,20 @@ POST {{baseDeployUrl}}/deploy
 Content-Type: application/json
 
 {
-  "ProtocolId": "test",
+  "ProtocolId": "test2",
   "ProtocolType": "TCP_SERVER",
   "DeviceInfoMap": {
-    "testDeviceGroupId2": [
+    "testDeviceGroupId2365": [
       {
         "DeviceId": "testDeviceId2",
         "DeviceName": "testDeviceName"
       }
     ]
   },
-  "Number": 1
+  "Properties": {
+    "port": 12349
+  },
+  "Number": 2
 }
 
 ###
