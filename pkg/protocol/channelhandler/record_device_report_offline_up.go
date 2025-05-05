@@ -41,6 +41,17 @@ type (
 	}
 )
 
+func init() {
+	core.RegisterChannelHandler(&core.ChannelHandlerRegister{
+		ChannelHandlerType: "recordDeviceReportOffline",
+		Setup: func(setupContext *core.SetupContext) error {
+			err := core.ChannelHandlerPipelineCommon.AddLast("recordDeviceReportOffline",
+				NewRecordDeviceReportOfflineChannelHandler(setupContext.Context, setupContext.Logger))
+			return err
+		},
+	})
+}
+
 func NewRecordDeviceReportOfflineChannelHandler(ctx context.Context, logger *zap.Logger) *RecordChannelHandler {
 	reportRecord := getReportRecord(ctx, logger)
 	reportRecord.Start()

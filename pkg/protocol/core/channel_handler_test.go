@@ -8,3 +8,11 @@ func TestChannelHandler(t *testing.T) {
 		t.Error()
 	}
 }
+
+func TestGetRegisterChannelHandler(t *testing.T) {
+
+}
+
+func TestRegisterChannelHandler(t *testing.T) {
+
+}

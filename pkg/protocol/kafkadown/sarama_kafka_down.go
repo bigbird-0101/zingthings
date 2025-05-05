@@ -18,19 +18,15 @@ import (
 	"syscall"
 	"time"
 	"zingthings/pkg/common"
+	"zingthings/pkg/protocol/config"
 	"zingthings/pkg/protocol/core"
-)
-
-var (
-	brokers       = "10.82.14.72:9092"
-	group         = "test-group"
-	topicsPattern = "zthings.*.down"
 )
 
 type (
 	SaramaKafkaDown struct {
 		consumer            *Consumer
 		topicsPatternRegexp *regexp.Regexp
+		configCore          *config.Config
 		logger              *zap.Logger
 		context             context.Context
 	}
@@ -54,6 +50,7 @@ func (c Consumer) Setup(session sarama.ConsumerGroupSession) error {
 		zap.Int32("generationID", session.GenerationID()),
 		zap.String("claims", fmt.Sprintf("%v", session.Claims())),
 	).Info("consumer group session setup")
+	c.ready <- true
 	return nil
 }
 
@@ -105,13 +102,16 @@ func (c Consumer) ConsumeClaim(session sarama.ConsumerGroupSession, claim sarama
 	}
 }
 
-func NewSaramaKafkaDown(logger *zap.Logger, context context.Context) *SaramaKafkaDown {
-	config := sarama.NewConfig()
-	client, err := sarama.NewConsumerGroup(strings.Split(brokers, ","), group, config)
+func NewSaramaKafkaDown(logger *zap.Logger, context context.Context, configCore *config.Config) *SaramaKafkaDown {
+	configNew := sarama.NewConfig()
+	configNew.Version = sarama.V2_8_1_0
+	kafka := configCore.Kafka
+	client, err := sarama.NewConsumerGroup(kafka.Broker.List,
+		kafka.Consumer.Group, configNew)
 	if err != nil {
 		log.Panicf("Error creating consumer group client: %v", err)
 	}
-	re, err := regexp.Compile(topicsPattern)
+	re, err := regexp.Compile(kafka.Consumer.TopicPattern)
 	if err != nil {
 		log.Panicf("Error compiling topics regex: %v", err)
 	}
@@ -119,6 +119,7 @@ func NewSaramaKafkaDown(logger *zap.Logger, context context.Context) *SaramaKafk
 		logger:              logger.Named("sarama_kafka_down"),
 		topicsPatternRegexp: re,
 		context:             context,
+		configCore:          configCore,
 		consumer: &Consumer{
 			ready:         make(chan bool),
 			consumerGroup: client,
@@ -131,8 +132,8 @@ func NewSaramaKafkaDown(logger *zap.Logger, context context.Context) *SaramaKafk
 func (s *SaramaKafkaDown) Start() {
 	keepRunning := true
 	ctx, cancel := context.WithCancel(s.context)
-	config := sarama.NewConfig()
-	newClient, err := sarama.NewClient(strings.Split(brokers, ","), config)
+	configNew := sarama.NewConfig()
+	newClient, err := sarama.NewClient(s.configCore.Kafka.Broker.List, configNew)
 	wg := &sync.WaitGroup{}
 	wg.Add(1)
 
@@ -151,8 +152,8 @@ func (s *SaramaKafkaDown) Start() {
 			// `Consume` should be called inside an infinite loop, when a
 			// server-side rebalance happens, the consumer session will need to be
 			// recreated to get the new claims
-			if err := s.consumer.consumerGroup.Consume(ctx, topics, s.consumer); err != nil {
-				if errors.Is(err, sarama.ErrClosedConsumerGroup) {
+			if err2 := s.consumer.consumerGroup.Consume(ctx, topics, s.consumer); err2 != nil {
+				if errors.Is(err2, sarama.ErrClosedConsumerGroup) {
 					return
 				}
 				s.logger.Error("Error from consumer: %v", zap.Error(err))
@@ -267,7 +268,7 @@ func (s *SaramaKafkaDown) refreshTopics(client sarama.Client, prevConsumerGroup 
 				logger:   s.logger.Named("kafka_sarama_new_consumer"),
 			}
 
-			newConsumerGroup, err := sarama.NewConsumerGroupFromClient(group, client)
+			newConsumerGroup, err := sarama.NewConsumerGroupFromClient(s.configCore.Kafka.Consumer.Group, client)
 			if err != nil {
 				s.logger.Error("Error creating new consumer group: %v", zap.Error(err))
 				return
@@ -279,9 +280,13 @@ func (s *SaramaKafkaDown) refreshTopics(client sarama.Client, prevConsumerGroup 
 					s.logger.Error("Error closing new consumer group: %v", zap.Error(err))
 				}
 			}(newConsumerGroup)
+			consumerGroupOld := s.consumer.consumerGroup
 			newConsumer.consumerGroup = newConsumerGroup
 			oldConsumer := s.consumer
 			close(oldConsumer.ready)
+			if consumerGroupOld != nil {
+				_ = consumerGroupOld.Close()
+			}
 			s.consumer = newConsumer
 			go func() {
 				ctx, cancel := context.WithCancel(s.context)
@@ -293,11 +298,11 @@ func (s *SaramaKafkaDown) refreshTopics(client sarama.Client, prevConsumerGroup 
 				// start Consume
 				go func() {
 					defer wg.Done()
-					if err := newConsumerGroup.Consume(ctx, filteredTopics, newConsumer); err != nil {
-						s.logger.Error("Error from consumer:", zap.Error(err))
+					if err2 := newConsumerGroup.Consume(ctx, filteredTopics, newConsumer); err2 != nil {
+						s.logger.Error("Error from consumer:", zap.Error(err2))
 					}
 				}()
-
+				<-s.consumer.ready
 				wg.Wait()
 			}()
 		}

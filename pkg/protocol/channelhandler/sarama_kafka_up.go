@@ -8,6 +8,7 @@ import (
 	"os/signal"
 	"syscall"
 	"zingthings/pkg/common"
+	"zingthings/pkg/protocol/config"
 	"zingthings/pkg/protocol/core"
 )
 
@@ -19,13 +20,24 @@ type (
 	}
 )
 
-func NewKafkaUpSaramaChannelHandler(logger *zap.Logger) *KafkaUpSaramaChannelHandler {
+func init() {
+	core.RegisterChannelHandler(&core.ChannelHandlerRegister{
+		ChannelHandlerType: "kafka",
+		Setup: func(setupContext *core.SetupContext) error {
+			err := core.ChannelHandlerPipelineCommon.AddLast("kafka",
+				NewKafkaUpSaramaChannelHandler(setupContext.Logger, setupContext.Config))
+			return err
+		},
+	})
+}
+
+func NewKafkaUpSaramaChannelHandler(logger *zap.Logger, configCore *config.Config) *KafkaUpSaramaChannelHandler {
 	named := logger.Named("KafkaUpSaramaChannelHandler")
 	producerConfig := sarama.NewConfig()
 	producerConfig.Producer.RequiredAcks = sarama.WaitForLocal
 	producerConfig.Producer.Retry.Max = 10
 	producerConfig.Producer.Return.Successes = true
-	producer, err := sarama.NewSyncProducer([]string{"10.82.14.72:9092"}, producerConfig)
+	producer, err := sarama.NewSyncProducer(configCore.Kafka.Broker.List, producerConfig)
 	if err != nil {
 		named.Fatal("sarama.NewSyncProducer err", zap.Error(err))
 	}

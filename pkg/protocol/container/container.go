@@ -14,10 +14,12 @@ import (
 	"strings"
 	"syscall"
 	"zingthings/pkg/common"
+	"zingthings/pkg/protocol/config"
 	"zingthings/pkg/protocol/core"
 	httpClientProtocol "zingthings/pkg/protocol/extension/protocol/httpclient"
 	httpServerProtocol "zingthings/pkg/protocol/extension/protocol/httpserver"
 	tcpServerProtocol "zingthings/pkg/protocol/extension/protocol/tcpserver"
+	"zingthings/pkg/protocol/kafkadown"
 	"zingthings/pkg/protocol/register"
 	"zingthings/pkg/util/httpserver"
 )
@@ -47,14 +49,10 @@ func GetContainerServerPort() int {
 	return port
 }
 
-func Server(ctx context.Context, logger *zap.Logger) {
+func Server(ctx context.Context, logger *zap.Logger, config *config.Config) {
 	deploy := NewContainer(logger, core.DefaultProtocolManagerCommon, ctx)
-	//err := core.ChannelHandlerPipelineCommon.AddLast("kafkaUp", channelhandler.NewKafkaUpSaramaChannelHandler(logger))
-	//if err != nil {
-	//	logger.Error("add common channel handler fail", zap.Error(err))
-	//	return
-	//}
-	//go kafkadown.NewSaramaKafkaDown(logger, ctx).Start()
+	core.InitChannelHandler(ctx, logger, config)
+	go kafkadown.NewSaramaKafkaDown(logger, ctx, config).Start()
 	serverPort := GetContainerServerPort()
 	etcdRegister := register.NewEtcdRegister(ctx, logger, serverPort)
 	deploy.etcdRegister = etcdRegister

@@ -1,8 +1,11 @@
 package core
 
 import (
+	"context"
 	"encoding/json"
+	"go.uber.org/zap"
 	"net/http"
+	"zingthings/pkg/protocol/config"
 )
 
 type (
@@ -71,7 +74,18 @@ type (
 		DeviceGroup DeviceGroup
 	}
 
+	SetupContext struct {
+		Context context.Context
+		Logger  *zap.Logger
+		Config  *config.Config
+	}
+
 	ChannelHandler interface {
+	}
+
+	ChannelHandlerRegister struct {
+		ChannelHandlerType string
+		Setup              func(setupContext *SetupContext) error
 	}
 
 	ChannelDownStreamHandler interface {

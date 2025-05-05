@@ -1,5 +1,12 @@
 package core
 
+import (
+	"context"
+	"go.uber.org/zap"
+	"sync"
+	"zingthings/pkg/protocol/config"
+)
+
 type (
 	SimplePredicateChannelHandler struct {
 		ProtocolType  ProtocolType
@@ -7,6 +14,17 @@ type (
 		PredicateUp   func(message *Message) bool
 		DealDown      func(context ChannelHandlerContext, message *Message)
 		DealUp        func(context ChannelHandlerContext, message *Message)
+	}
+	ChannelHandlerRegisterMap struct {
+		channelHandlerRegisterMap map[string]*ChannelHandlerRegister
+		lock                      sync.RWMutex
+	}
+)
+
+var (
+	ChannelHandlerRegisterCore = &ChannelHandlerRegisterMap{
+		channelHandlerRegisterMap: make(map[string]*ChannelHandlerRegister),
+		lock:                      sync.RWMutex{},
 	}
 )
 
@@ -143,4 +161,36 @@ func (s *SimplePredicateChannelHandler) OnChannelUpStream(context ChannelHandler
 		s.DealUp(context, message)
 	}
 	context.SendUpStream(data)
+}
+
+func RegisterChannelHandler(channelHandlerRegister *ChannelHandlerRegister) {
+	ChannelHandlerRegisterCore.lock.Lock()
+	defer ChannelHandlerRegisterCore.lock.Unlock()
+	ChannelHandlerRegisterCore.channelHandlerRegisterMap[channelHandlerRegister.ChannelHandlerType] = channelHandlerRegister
+}
+
+func GetRegisterChannelHandler() []*ChannelHandlerRegister {
+	ChannelHandlerRegisterCore.lock.RLock()
+	defer ChannelHandlerRegisterCore.lock.RUnlock()
+	registerMap := ChannelHandlerRegisterCore.channelHandlerRegisterMap
+	registers := make([]*ChannelHandlerRegister, 0, len(ChannelHandlerRegisterCore.channelHandlerRegisterMap))
+	for _, v := range registerMap {
+		registers = append(registers, v)
+	}
+	return registers
+}
+
+func InitChannelHandler(ctx context.Context, logger *zap.Logger, config *config.Config) {
+	handlers := GetRegisterChannelHandler()
+	for _, handler := range handlers {
+		err := handler.Setup(&SetupContext{
+			Logger:  logger,
+			Context: ctx,
+			Config:  config,
+		})
+		if err != nil {
+			logger.Error("add common channel handler fail", zap.Error(err))
+			return
+		}
+	}
 }

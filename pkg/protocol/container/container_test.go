@@ -24,7 +24,7 @@ func TestDeploy_Deploy(t *testing.T) {
 		DeviceName:  "testDeviceGroupName",
 		DeviceGroup: key,
 	}}
-	request := &Request{
+	request := &core.DeployRequest{
 		ProtocolId:    "test",
 		ProtocolType:  core.HttpClient,
 		Properties:    make(map[string]interface{}),

@@ -14,6 +14,7 @@ require (
 	go.etcd.io/etcd/client/v3 v3.5.17
 	go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp v0.53.0
 	go.uber.org/zap v1.27.0
+	gopkg.in/yaml.v3 v3.0.1
 	sigs.k8s.io/controller-runtime v0.19.4
 )
 
