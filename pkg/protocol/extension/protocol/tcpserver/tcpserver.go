@@ -23,6 +23,15 @@ type (
 	}
 )
 
+func init() {
+	core.RegisterProtocol(core.ProtocolInitRegister{
+		ProtocolType: core.TcpServer,
+		Setup: func(context *core.ProtocolSetupContext) core.Protocol {
+			return NewTcpServerProtocol(context.Logger, context.Protocol)
+		},
+	})
+}
+
 func NewTcpServerProtocol(logger *zap.Logger, protocol core.GenericProtocol) *Protocol {
 	return &Protocol{
 		GenericProtocol: protocol,

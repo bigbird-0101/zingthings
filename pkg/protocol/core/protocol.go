@@ -1,8 +1,10 @@
 package core
 
 import (
+	"go.uber.org/zap"
 	"sync"
 	"zingthings/pkg/common"
+	"zingthings/pkg/protocol/config"
 )
 
 const (
@@ -11,9 +13,6 @@ const (
 	TcpServer  = "TCP_SERVER"
 	TcpClient  = "TCP_CLIENT"
 )
-
-var DefaultProtocolManagerCommon = NewProtocolManager()
-var ChannelHandlerPipelineCommon = DefaultPipelineFactoryCommon.Create()
 
 type (
 	GenericProtocol struct {
@@ -31,6 +30,30 @@ type (
 	DefaultProtocolManager struct {
 		ProtocolMap map[ProtocolId]Protocol
 		lock        sync.RWMutex
+	}
+
+	ProtocolSetupContext struct {
+		Protocol GenericProtocol
+		Logger   *zap.Logger
+		Config   *config.Config
+	}
+
+	Setup func(context *ProtocolSetupContext) Protocol
+
+	ProtocolInitRegister struct {
+		ProtocolType ProtocolType
+		Setup        Setup
+	}
+	ProtocolInitRegisterManager struct {
+		protocolInitRegisterMap map[ProtocolType]ProtocolInitRegister
+	}
+)
+
+var (
+	DefaultProtocolManagerCommon       = NewProtocolManager()
+	ChannelHandlerPipelineCommon       = DefaultPipelineFactoryCommon.Create()
+	DefaultProtocolInitRegisterManager = &ProtocolInitRegisterManager{
+		protocolInitRegisterMap: make(map[ProtocolType]ProtocolInitRegister),
 	}
 )
 
@@ -123,4 +146,24 @@ func (nw *ProtocolWrapper) GetProtocolType() ProtocolType {
 
 func (nw *ProtocolWrapper) GetProtocolId() ProtocolId {
 	return nw.Protocol.GetProtocolId()
+}
+
+func RegisterProtocol(initRegister ProtocolInitRegister) {
+	DefaultProtocolInitRegisterManager.protocolInitRegisterMap[initRegister.ProtocolType] = initRegister
+}
+
+func GetProtocolSetup(protocolType ProtocolType) Setup {
+	v, ok := DefaultProtocolInitRegisterManager.protocolInitRegisterMap[protocolType]
+	if !ok {
+		return nil
+	}
+	return v.Setup
+}
+
+func InitProtocol(ctx *ProtocolSetupContext) Protocol {
+	initRegister := DefaultProtocolInitRegisterManager.protocolInitRegisterMap[ctx.Protocol.GetProtocolType()]
+	if initRegister.Setup != nil {
+		return initRegister.Setup(ctx)
+	}
+	return nil
 }

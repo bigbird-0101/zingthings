@@ -16,9 +16,6 @@ import (
 	"zingthings/pkg/common"
 	"zingthings/pkg/protocol/config"
 	"zingthings/pkg/protocol/core"
-	httpClientProtocol "zingthings/pkg/protocol/extension/protocol/httpclient"
-	httpServerProtocol "zingthings/pkg/protocol/extension/protocol/httpserver"
-	tcpServerProtocol "zingthings/pkg/protocol/extension/protocol/tcpserver"
 	"zingthings/pkg/protocol/kafkadown"
 	"zingthings/pkg/protocol/register"
 	"zingthings/pkg/util/httpserver"
@@ -34,6 +31,7 @@ type (
 		logger          *zap.Logger
 		ctx             context.Context
 		etcdRegister    *register.EtcdRegister
+		config          *config.Config
 	}
 )
 
@@ -50,7 +48,7 @@ func GetContainerServerPort() int {
 }
 
 func Server(ctx context.Context, logger *zap.Logger, config *config.Config) {
-	deploy := NewContainer(logger, core.DefaultProtocolManagerCommon, ctx)
+	deploy := NewContainer(logger, core.DefaultProtocolManagerCommon, ctx, config)
 	core.InitChannelHandler(ctx, logger, config)
 	go kafkadown.NewSaramaKafkaDown(logger, ctx, config).Start()
 	serverPort := GetContainerServerPort()
@@ -179,11 +177,12 @@ func (d *Container) dealDeployRequest(response http.ResponseWriter, r *http.Requ
 	return
 }
 
-func NewContainer(logger *zap.Logger, protocolManager core.ProtocolManager, ctx context.Context) *Container {
+func NewContainer(logger *zap.Logger, protocolManager core.ProtocolManager, ctx context.Context, config *config.Config) *Container {
 	return &Container{
 		ProtocolManager: protocolManager,
 		logger:          logger.Named("protocol-container"),
 		ctx:             ctx,
+		config:          config,
 	}
 }
 
@@ -233,15 +232,16 @@ func (d *Container) getProtocol(protocolType core.ProtocolType, protocolId core.
 	protocol.ProtocolId = protocolId
 	protocol.DeviceGroup = group
 	protocol.DeviceInfos = info
-	switch protocolType {
-	case core.HttpClient:
-		return httpClientProtocol.NewHttpClientProtocol(d.logger, protocol), nil
-	case core.HttpServer:
-		return httpServerProtocol.NewHttpServerProtocol(d.logger, protocol), nil
-	case core.TcpServer:
-		return tcpServerProtocol.NewTcpServerProtocol(d.logger, protocol), nil
+	setup := core.GetProtocolSetup(protocolType)
+	if setup == nil {
+		return nil, errors.New("protocol type not support")
 	}
-	return nil, errors.New(string(protocolType + " protocol type not support"))
+	protocolReal := setup(&core.ProtocolSetupContext{
+		Config:   d.config,
+		Protocol: protocol,
+		Logger:   d.logger,
+	})
+	return protocolReal, nil
 }
 
 func (d *Container) getProtocolStatus(response http.ResponseWriter, request *http.Request) {

@@ -22,6 +22,15 @@ type (
 	}
 )
 
+func init() {
+	core.RegisterProtocol(core.ProtocolInitRegister{
+		ProtocolType: core.HttpServer,
+		Setup: func(context *core.ProtocolSetupContext) core.Protocol {
+			return NewHttpServerProtocol(context.Logger, context.Protocol)
+		},
+	})
+}
+
 func NewHttpServerProtocol(logger *zap.Logger, protocol core.GenericProtocol) *ProtocolImpl {
 	return &ProtocolImpl{
 		GenericProtocol: protocol,
