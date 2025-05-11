@@ -23,7 +23,7 @@ const (
 
 type (
 	Deploy struct {
-		coordinator *Coordinator
+		coordinator *CoordinatorEtcd
 		logger      *zap.Logger
 	}
 	Request struct {
@@ -46,7 +46,7 @@ func NewDeploy(ctx context.Context, logger *zap.Logger, port int) *Deploy {
 		panic(err)
 	}
 	return &Deploy{
-		coordinator: NewCoordinator(ctx, logger, &core.NodeInfo{Host: ip, Port: port, Timestamp: time.Now().UnixMilli()}),
+		coordinator: NewCoordinatorEtcd(ctx, logger, &core.NodeInfo{Host: ip, Port: port, Timestamp: time.Now().UnixMilli()}),
 		logger:      logger.Named("Deploy"),
 	}
 }
